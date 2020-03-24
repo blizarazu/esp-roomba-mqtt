@@ -19,6 +19,7 @@ extern "C" {
 RemoteDebug Debug;
 #else
 #define DLOG(msg, ...)
+#define VLOG(msg, ...)
 #endif
 
 // Roomba setup
@@ -167,6 +168,7 @@ float readADC(int samples) {
 }
 
 void debugCallback() {
+  #if LOGGING
   String cmd = Debug.getLastCommand();
 
   // Debugging commands via telnet
@@ -223,6 +225,7 @@ void debugCallback() {
   } else {
     DLOG("Unknown command %s\n", cmd.c_str());
   }
+  #endif
 }
 
 void sleepIfNecessary() {
@@ -427,7 +430,9 @@ void loop() {
   // Important callbacks that _must_ happen every cycle
   ArduinoOTA.handle();
   yield();
+  #if LOGGING
   Debug.handle();
+  #endif
 
   // Skip all other logic if we're running an OTA update
   if (OTAStarted) {
