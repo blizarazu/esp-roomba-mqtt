@@ -79,7 +79,7 @@ void wakeup() {
 void wakeOnDock() {
   DLOG("Wakeup Roomba on dock\n");
   wakeup();
-#ifdef ROOMBA_650_SLEEP_FIX
+#if ROOMBA_650_SLEEP_FIX
   // Some black magic from @AndiTheBest to keep the Roomba awake on the dock
   // See https://github.com/johnboiles/esp-roomba-mqtt/issues/3#issuecomment-402096638
   delay(10);
@@ -226,7 +226,7 @@ void debugCallback() {
 }
 
 void sleepIfNecessary() {
-#ifdef ENABLE_ADC_SLEEP
+#if ENABLE_ADC_SLEEP
   // Check the battery, if it's too low, sleep the ESP (so we don't murder the battery)
   float mV = readADC(10);
   // According to this post, you want to stop using NiMH batteries at about 0.9V per cell
