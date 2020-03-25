@@ -114,6 +114,14 @@ void Roomba::spot()
   _serial->write(134);
 }
 
+void Roomba::setDayTime(uint8_t dayOfWeek, uint8_t hour, uint8_t minute)
+{
+  _serial->write(168);
+  _serial->write(dayOfWeek);
+  _serial->write(hour);
+  _serial->write(minute);
+}
+
 void Roomba::drive(int16_t velocity, int16_t radius)
 {
   _serial->write(137);

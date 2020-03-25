@@ -445,6 +445,12 @@ public:
     /// Changes mode to Passive
     void spot();
 	
+    /// Sets Roomba’s clock
+    /// \param[in] dayOfWeek Day of the week starting on Sunday from 0 (Sunday) to 6 (Saturday)
+    /// \param[in] hour Current time hour in 24 hour format (0-23)
+    /// \param[in] minute Current time minute (0-59)
+    void setDayTime(uint8_t dayOfWeek, uint8_t hour, uint8_t minute);
+
     /// Starts the Roomba driving with a specified wheel velocity and radius of turn
     /// \param[in] velocity Speed in mm/s (-500 to 500 mm/s)
     /// \param[in] radius Radius of the turn in mm. (-2000 to 2000 mm). 

@@ -5,6 +5,7 @@
 #include <Roomba.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <Timezone.h>
 #include "config.h"
 extern "C" {
 #include "user_interface.h"
@@ -57,6 +58,11 @@ uint8_t sensors[] = {
   Roomba::SensorBatteryCharge, // PID 25, 2 bytes, mAh, unsigned
   Roomba::SensorBatteryCapacity // PID 26, 2 bytes, mAh, unsigned
 };
+
+// Central European Time (Frankfurt, Paris)
+TimeChangeRule CEST = {"CEST", Last, Sun, Mar, 2, 120};     // Central European Summer Time
+TimeChangeRule CET = {"CET ", Last, Sun, Oct, 3, 60};       // Central European Standard Time
+Timezone tz(CEST, CET);
 
 // Network setup
 WiFiClient wifiClient;
@@ -173,6 +179,17 @@ float readADC(int samples) {
   return mV;
 }
 
+void setDateTime() {
+  configTime(0, 0, NTP_SERVER_1, NTP_SERVER_2);
+  time_t now = time(nullptr);
+  while (now < 8 * 3600 * 2) {
+    delay(500);
+    now = time(nullptr);
+  }
+  time_t local = tz.toLocal(now);
+  roomba.setDayTime(dayOfWeek(local)-1, hour(local), minute(local));
+}
+
 void debugCallback() {
   #if LOGGING
   String cmd = Debug.getLastCommand();
@@ -228,6 +245,8 @@ void debugCallback() {
   } else if (cmd == "streamreset") {
     DLOG("Resetting stream\n");
     roomba.stream({}, 0);
+  } else if (cmd == "time") {
+    setDateTime();
   } else {
     DLOG("Unknown command %s\n", cmd.c_str());
   }
@@ -394,6 +413,12 @@ void setup() {
 
   // Request sensor stream
   roomba.stream(sensors, sizeof(sensors));
+
+  #ifdef SET_DATETIME
+  wakeup();
+  // set time
+  setDateTime();
+  #endif
 }
 
 void reconnect() {
