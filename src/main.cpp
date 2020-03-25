@@ -118,7 +118,7 @@ bool performCommand(const char *cmdchar) {
   String cmd(cmdchar);
 
   // MQTT protocol commands
-  if (cmd == "turn_on") {
+  if (cmd == "turn_on" || cmd == "clean") {
     DLOG("Turning on\n");
     roomba.cover();
     roombaState.cleaning = true;
