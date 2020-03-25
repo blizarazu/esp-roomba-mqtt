@@ -4,7 +4,8 @@
 #define BRC_PIN 14
 #define ROOMBA_650_SLEEP_FIX 0
 
-#define SET_DATETIME 1
+#define SET_ROOMBA_CLOCK 1
+#define TIMEZONE TZ_Europe_Madrid
 #define NTP_SERVER_1 "pool.ntp.org"
 #define NTP_SERVER_2 "time.nist.gov"
 

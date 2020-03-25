@@ -5,7 +5,7 @@
 #include <Roomba.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include <Timezone.h>
+#include <TZ.h>
 #include "config.h"
 extern "C" {
 #include "user_interface.h"
@@ -64,11 +64,6 @@ uint8_t sensors[] = {
   Roomba::SensorChargingSourcesAvailable, // PID 34, 1 byte, unsigned
   Roomba::SensorOIMode // PID 35, 1 byte, unsigned
 };
-
-// Central European Time (Frankfurt, Paris)
-TimeChangeRule CEST = {"CEST", Last, Sun, Mar, 2, 120};     // Central European Summer Time
-TimeChangeRule CET = {"CET ", Last, Sun, Oct, 3, 60};       // Central European Standard Time
-Timezone tz(CEST, CET);
 
 // Network setup
 WiFiClient wifiClient;
@@ -186,14 +181,20 @@ float readADC(int samples) {
 }
 
 void setDateTime() {
-  configTime(0, 0, NTP_SERVER_1, NTP_SERVER_2);
+  configTime(TIMEZONE, NTP_SERVER_1, NTP_SERVER_2);
   time_t now = time(nullptr);
   while (now < 8 * 3600 * 2) {
     delay(500);
     now = time(nullptr);
   }
-  time_t local = tz.toLocal(now);
-  roomba.setDayTime(dayOfWeek(local)-1, hour(local), minute(local));
+  struct tm * timeinfo;
+  time(&now);
+  timeinfo = localtime(&now);
+  #ifdef SET_ROOMBA_CLOCK
+  wakeup();
+  roomba.start();
+  roomba.setDayTime(timeinfo->tm_wday, timeinfo->tm_hour, timeinfo->tm_min);
+  #endif
 }
 
 void moveBack() {
@@ -428,6 +429,9 @@ void setup() {
   ArduinoOTA.begin();
   ArduinoOTA.onStart(onOTAStart);
 
+  // Synchronize time useing SNTP. This is necessary to verify that
+  // the TLS certificates offered by the server are currently valid.
+  setDateTime();
   mqttClient.setServer(MQTT_SERVER, 1883);
   mqttClient.setCallback(mqttCallback);
 
@@ -447,12 +451,6 @@ void setup() {
 
   // Request sensor stream
   roomba.stream(sensors, sizeof(sensors));
-
-  #ifdef SET_DATETIME
-  wakeup();
-  // set time
-  setDateTime();
-  #endif
 }
 
 void reconnect() {
