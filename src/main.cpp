@@ -88,7 +88,6 @@ void wakeup() {
   delay(200);
   pinMode(BRC_PIN,INPUT);
   delay(200);
-  Serial.write(128); // Start
 }
 
 void wakeOnDock() {
@@ -111,46 +110,103 @@ void wakeOffDock() {
   Serial.write(130); // Passive mode
 }
 
-bool performCommand(const char *cmdchar) {
+void turnOn() {
+  DLOG("Turning on\n");
   wakeup();
+  roomba.start();
+  delay(50);
+  roomba.safeMode();
+  delay(50);
+  roomba.cover();
+  roombaState.cleaning = true;
+}
 
+void turnOff() {
+  DLOG("Turning off\n");
+  roomba.start();
+  delay(50);
+  roomba.power();
+  roombaState.cleaning = false;
+}
+
+void stop() {
+  if (roombaState.cleaning) {
+    DLOG("Stopping\n");
+    roomba.start();
+    delay(50);
+    roomba.cover();
+  } else {
+    DLOG("Not cleaning, can't stop\n");
+  }
+}
+
+void toggle() {
+  DLOG("Toggling\n");
+  if (roombaState.cleaning)
+    stop();
+  else
+    turnOn();
+}
+
+void cleanSpot() {
+  DLOG("Cleaning Spot\n");
+  wakeup();
+  roomba.start();
+  delay(50);
+  roomba.safeMode();
+  delay(50);
+  roomba.spot();
+  roombaState.cleaning = true;
+}
+
+void returnToBase() {
+  DLOG("Returning to Base\n");
+  wakeup();
+  roomba.start();
+  delay(50);
+  roomba.safeMode();
+  delay(50);
+  roomba.dock();
+  roombaState.cleaning = true;
+}
+
+void maxClean() {
+  DLOG("Max Clean\n");
+  wakeup();
+  roomba.start();
+  delay(50);
+  roomba.safeMode();
+  delay(50);
+  roomba.maxClean();
+  roombaState.cleaning = true;
+}
+
+bool performCommand(const char *cmdchar) {
   // Char* string comparisons dont always work
   String cmd(cmdchar);
 
   // MQTT protocol commands
   if (cmd == "turn_on" || cmd == "clean") {
-    DLOG("Turning on\n");
-    roomba.cover();
-    roombaState.cleaning = true;
+    turnOn();
   } else if (cmd == "turn_off") {
-    DLOG("Turning off\n");
-    roomba.power();
-    roombaState.cleaning = false;
+    turnOff();
   } else if (cmd == "toggle" || cmd == "start_pause") {
-    DLOG("Toggling\n");
-    roomba.cover();
+    toggle();
   } else if (cmd == "stop") {
-    if (roombaState.cleaning) {
-      DLOG("Stopping\n");
-      roomba.cover();
-    } else {
-      DLOG("Not cleaning, can't stop\n");
-    }
+    stop();
   } else if (cmd == "clean_spot") {
-    DLOG("Cleaning Spot\n");
-    roombaState.cleaning = true;
-    roomba.spot();
+    cleanSpot();
   } else if (cmd == "locate") {
     DLOG("Locating\n");
     // TODO
+    wakeup();
+    roomba.start();
   } else if (cmd == "max_clean") {
-    DLOG("Max Clean\n");
-    roombaState.cleaning = true;
-    roomba.maxClean();
+    maxClean();
   } else if (cmd == "return_to_base") {
-    DLOG("Returning to Base\n");
-    roombaState.cleaning = true;
-    roomba.dock();
+    returnToBase();
+  } else if (cmd == "wake_up") {
+    wakeup();
   } else {
     return false;
   }
