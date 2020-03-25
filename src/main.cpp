@@ -432,7 +432,7 @@ void setup() {
   // Synchronize time useing SNTP. This is necessary to verify that
   // the TLS certificates offered by the server are currently valid.
   setDateTime();
-  mqttClient.setServer(MQTT_SERVER, 1883);
+  mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
 
   #if LOGGING
@@ -456,7 +456,7 @@ void setup() {
 void reconnect() {
   DLOG("Attempting MQTT connection...\n");
   // Attempt to connect
-  if (mqttClient.connect(HOSTNAME, MQTT_USER, MQTT_PASSWORD, lwtTopic, 0, false, lwtMessage)) {
+  if (mqttClient.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWORD, lwtTopic, 0, false, lwtMessage)) {
     DLOG("MQTT connected\n");
     mqttClient.subscribe(commandTopic);
   } else {

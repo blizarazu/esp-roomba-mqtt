@@ -12,8 +12,10 @@
 #define ADC_VOLTAGE_DIVIDER 44.551316985
 #define ENABLE_ADC_SLEEP 0
 
+#define MQTT_CLIENT_ID "roomba.local"
 #define MQTT_SERVER "10.0.0.2"
 #define MQTT_USER "homeassistant"
+#define MQTT_PORT 1883
 #define MQTT_COMMAND_TOPIC "vacuum/command"
 #define MQTT_STATE_TOPIC "vacuum/state"
 #define MQTT_LWT_TOPIC "vacuum/LWT"
