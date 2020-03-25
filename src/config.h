@@ -11,3 +11,5 @@
 #define MQTT_USER "homeassistant"
 #define MQTT_COMMAND_TOPIC "vacuum/command"
 #define MQTT_STATE_TOPIC "vacuum/state"
+#define MQTT_LWT_TOPIC "vacuum/LWT"
+#define MQTT_LWT_MESSAGE "Online"

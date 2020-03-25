@@ -66,6 +66,8 @@ bool OTAStarted;
 PubSubClient mqttClient(wifiClient);
 const PROGMEM char *commandTopic = MQTT_COMMAND_TOPIC;
 const PROGMEM char *statusTopic = MQTT_STATE_TOPIC;
+const PROGMEM char *lwtTopic = MQTT_LWT_TOPIC;
+const PROGMEM char *lwtMessage = MQTT_LWT_MESSAGE;
 
 void wakeup() {
   DLOG("Wakeup Roomba\n");
@@ -397,7 +399,7 @@ void setup() {
 void reconnect() {
   DLOG("Attempting MQTT connection...\n");
   // Attempt to connect
-  if (mqttClient.connect(HOSTNAME, MQTT_USER, MQTT_PASSWORD)) {
+  if (mqttClient.connect(HOSTNAME, MQTT_USER, MQTT_PASSWORD, lwtTopic, 0, false, lwtMessage)) {
     DLOG("MQTT connected\n");
     mqttClient.subscribe(commandTopic);
   } else {
