@@ -129,6 +129,10 @@ bool performCommand(const char *cmdchar) {
   } else if (cmd == "locate") {
     DLOG("Locating\n");
     // TODO
+  } else if (cmd == "max_clean") {
+    DLOG("Max Clean\n");
+    roombaState.cleaning = true;
+    roomba.maxClean();
   } else if (cmd == "return_to_base") {
     DLOG("Returning to Base\n");
     roombaState.cleaning = true;
