@@ -37,6 +37,9 @@ typedef struct {
   // underflow to ~65000mAh, so I think signed will work better.
   int16_t charge;
   uint16_t capacity;
+  int16_t temp;
+  uint8_t chargingSourcesAvailable;
+  uint8_t OIMode;
 
   // Derived state
   bool cleaning;
@@ -49,14 +52,17 @@ typedef struct {
 RoombaState roombaState = {};
 
 // Roomba sensor packet
-uint8_t roombaPacket[100];
+uint8_t roombaPacket[150];
 uint8_t sensors[] = {
   Roomba::SensorDistance, // PID 19, 2 bytes, mm, signed
   Roomba::SensorChargingState, // PID 21, 1 byte
   Roomba::SensorVoltage, // PID 22, 2 bytes, mV, unsigned
   Roomba::SensorCurrent, // PID 23, 2 bytes, mA, signed
+  Roomba::SensorBatteryTemperature, // PID 24, 1 byte, signed
   Roomba::SensorBatteryCharge, // PID 25, 2 bytes, mAh, unsigned
-  Roomba::SensorBatteryCapacity // PID 26, 2 bytes, mAh, unsigned
+  Roomba::SensorBatteryCapacity, // PID 26, 2 bytes, mAh, unsigned
+  Roomba::SensorChargingSourcesAvailable, // PID 34, 1 byte, unsigned
+  Roomba::SensorOIMode // PID 35, 1 byte, unsigned
 };
 
 // Central European Time (Frankfurt, Paris)
@@ -313,6 +319,10 @@ bool parseRoombaStateFromStreamPacket(uint8_t *packet, int length, RoombaState *
         state->current = packet[i+1] * 256 + packet[i+2];
         i += 3;
         break;
+      case Roomba::SensorBatteryTemperature: //24
+        state->temp = packet[i+1];
+        i += 2;
+        break;
       case Roomba::SensorBatteryCharge: // 25
         state->charge = packet[i+1] * 256 + packet[i+2];
         i += 3;
@@ -320,6 +330,14 @@ bool parseRoombaStateFromStreamPacket(uint8_t *packet, int length, RoombaState *
       case Roomba::SensorBatteryCapacity: //26
         state->capacity = packet[i+1] * 256 + packet[i+2];
         i += 3;
+        break;
+      case Roomba::SensorChargingSourcesAvailable: //34
+        state->chargingSourcesAvailable = packet[i+1];
+        i += 2;
+        break;
+      case Roomba::SensorOIMode: //35
+        state->OIMode = packet[i+1];
+        i += 2;
         break;
       case Roomba::SensorBumpsAndWheelDrops: // 7
         i += 2;
@@ -351,9 +369,9 @@ void readSensorPacket() {
     RoombaState rs = {};
     bool parsed = parseRoombaStateFromStreamPacket(roombaPacket, packetLength, &rs);
     verboseLogPacket(roombaPacket, packetLength);
-    if (parsed) {
+    if (parsed && rs.temp != 0) {
       roombaState = rs;
-      VLOG("Got Packet of len=%d! Distance:%dmm ChargingState:%d Voltage:%dmV Current:%dmA Charge:%dmAh Capacity:%dmAh\n", packetLength, roombaState.distance, roombaState.chargingState, roombaState.voltage, roombaState.current, roombaState.charge, roombaState.capacity);
+      VLOG("Got Packet of len=%d! OIMode:%d Distance:%dmm ChargingState:%d Voltage:%dmV Current:%dmA Charge:%dmAh Capacity:%dmAh\n", packetLength, roombaState.OIMode, roombaState.distance, roombaState.chargingState, roombaState.voltage, roombaState.current, roombaState.charge, roombaState.capacity);
       roombaState.cleaning = false;
       roombaState.docked = false;
       if (roombaState.current < -400) {
@@ -362,7 +380,7 @@ void readSensorPacket() {
         roombaState.docked = true;
       }
     } else {
-      VLOG("Failed to parse packet\n");
+      VLOG("Failed to parse packet, packetLength:%d, Temperature:%d\n", packetLength, rs.temp);
     }
   }
 }
@@ -438,16 +456,22 @@ void sendStatus() {
     return;
   }
   DLOG("Reporting packet Distance:%dmm ChargingState:%d Voltage:%dmV Current:%dmA Charge:%dmAh Capacity:%dmAh\n", roombaState.distance, roombaState.chargingState, roombaState.voltage, roombaState.current, roombaState.charge, roombaState.capacity);
-  StaticJsonDocument<200> root;
-  root["battery_level"] = (roombaState.charge * 100)/roombaState.capacity;
+  StaticJsonDocument<300> root;
+  root["battery_level"] = (roombaState.capacity) ? (roombaState.charge * 100)/roombaState.capacity : 0;
   root["cleaning"] = roombaState.cleaning;
-  root["docked"] = roombaState.docked;
+  root["docked"] = roombaState.chargingSourcesAvailable == Roomba::ChargeAvailableDock;
   root["charging"] = roombaState.chargingState == Roomba::ChargeStateReconditioningCharging
   || roombaState.chargingState == Roomba::ChargeStateFullCharging
   || roombaState.chargingState == Roomba::ChargeStateTrickleCharging;
+  root["chargingState"] = roombaState.chargingState;
   root["voltage"] = roombaState.voltage;
   root["current"] = roombaState.current;
   root["charge"] = roombaState.charge;
+  root["capacity"] = roombaState.capacity;
+  root["distance"] = roombaState.distance;
+  root["batteryTemperature"] = roombaState.temp;
+  root["chargingSourcesAvailable"] = roombaState.chargingSourcesAvailable;
+  root["OIMode"] = roombaState.OIMode;
   String jsonStr;
   serializeJson(root, jsonStr);
   mqttClient.publish(statusTopic, jsonStr.c_str());
