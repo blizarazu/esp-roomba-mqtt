@@ -3,6 +3,7 @@
 #define HOSTNAME "roomba" // e.g. roomba.local
 #define BRC_PIN 14
 #define ROOMBA_650_SLEEP_FIX 0
+#define KEEP_ROOMBA_AWAKE 0
 
 #define SET_ROOMBA_CLOCK 1
 #define TIMEZONE TZ_Europe_Madrid

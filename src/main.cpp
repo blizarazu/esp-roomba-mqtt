@@ -585,6 +585,8 @@ void loop() {
     lastConnectTime = now;
     reconnect();
   }
+
+  #if KEEP_ROOMBA_AWAKE
   // Wakeup the roomba at fixed intervals
   if (now - lastWakeupTime > 50000) {
     lastWakeupTime = now;
@@ -599,6 +601,8 @@ void loop() {
       wakeup();
     }
   }
+  #endif
+
   // Report the status over mqtt at fixed intervals
   if (now - lastStateMsgTime > 10000) {
     lastStateMsgTime = now;
