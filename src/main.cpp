@@ -196,6 +196,19 @@ void setDateTime() {
   roomba.setDayTime(dayOfWeek(local)-1, hour(local), minute(local));
 }
 
+void moveBack() {
+  roomba.fullMode();
+  delay(500);
+  DLOG("Switched to safeMode\n");
+  roomba.drive(-300, 0);
+  DLOG("Start back movement\n");
+  delay(5000);
+  roomba.drive(0, 0);
+  delay(100);
+  DLOG("Stop\n");
+  roomba.start(); // switch to Passive mode
+}
+
 void debugCallback() {
   #if LOGGING
   String cmd = Debug.getLastCommand();
@@ -205,6 +218,9 @@ void debugCallback() {
   } else if (cmd == "quit") {
     DLOG("Stopping Roomba\n");
     Serial.write(173);
+  } else if ( cmd == "back") {
+    DLOG("Move Roomba backward\n");
+    moveBack();
   } else if (cmd == "rreset") {
     DLOG("Resetting Roomba\n");
     roomba.reset();
