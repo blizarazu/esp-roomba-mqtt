@@ -66,7 +66,12 @@ uint8_t sensors[] = {
 };
 
 // Network setup
+#if USE_SSL
+#include <cacert.h>
+BearSSL::WiFiClientSecure wifiClient;
+#else
 WiFiClient wifiClient;
+#endif
 bool OTAStarted;
 
 // MQTT setup
@@ -432,6 +437,10 @@ void setup() {
   // Synchronize time useing SNTP. This is necessary to verify that
   // the TLS certificates offered by the server are currently valid.
   setDateTime();
+  #if USE_SSL
+  wifiClient.setCACert_P(caCert, caCertLen);
+  #endif
+
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
 
@@ -461,6 +470,11 @@ void reconnect() {
     mqttClient.subscribe(commandTopic);
   } else {
     DLOG("MQTT failed rc=%d try again in 5 seconds\n", mqttClient.state());
+    #if USE_SSL
+    char buf[256];
+    int ernum = wifiClient.getLastSSLError(buf, 256);
+    DLOG("MQTT SSL Error: %d - %s\n", ernum, buf);
+    #endif
   }
 }
 

@@ -9,6 +9,8 @@
 #define NTP_SERVER_1 "pool.ntp.org"
 #define NTP_SERVER_2 "time.nist.gov"
 
+#define USE_SSL 0
+
 #define ADC_VOLTAGE_DIVIDER 44.551316985
 #define ENABLE_ADC_SLEEP 0
 
