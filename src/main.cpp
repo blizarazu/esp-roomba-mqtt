@@ -182,6 +182,23 @@ void maxClean() {
   roombaState.cleaning = true;
 }
 
+void playMerryChristmas() {
+  const uint8_t notes1[] = {76, 16, 76, 16, 76, 32, 76, 16, 76, 16, 76, 32, 76, 16, 79, 16, 72, 16, 74, 16, 76, 32, 77, 16, 77, 16, 77, 16, 77, 32, 77, 16};
+  const uint8_t notes2[] = {76, 16, 76, 32, 79, 16, 79, 16, 77, 16, 74, 16, 72, 32};
+  wakeup();
+  roomba.start();
+  delay(50);
+  roomba.safeMode();
+  delay(50);
+  roomba.song(0, notes1, sizeof(notes1));
+  roomba.song(1, notes2, sizeof(notes2));
+  delay(50);
+  roomba.playSong(0);
+  delay(5010); // wait until first song is completed
+  roomba.playSong(1);
+}
+
+
 bool performCommand(const char *cmdchar) {
   // Char* string comparisons dont always work
   String cmd(cmdchar);
@@ -199,8 +216,7 @@ bool performCommand(const char *cmdchar) {
     cleanSpot();
   } else if (cmd == "locate") {
     DLOG("Locating\n");
-    // TODO
-    wakeup();
+    playMerryChristmas();
   } else if (cmd == "max_clean") {
     maxClean();
   } else if (cmd == "return_to_base") {
