@@ -78,6 +78,7 @@ bool OTAStarted;
 PubSubClient mqttClient(wifiClient);
 const PROGMEM char *commandTopic = MQTT_COMMAND_TOPIC;
 const PROGMEM char *statusTopic = MQTT_STATE_TOPIC;
+const PROGMEM char *driveTopic = MQTT_DRIVE_TOPIC;
 const PROGMEM char *lwtTopic = MQTT_LWT_TOPIC;
 const PROGMEM char *lwtMessage = MQTT_LWT_MESSAGE;
 
@@ -213,6 +214,32 @@ bool performCommand(const char *cmdchar) {
   return true;
 }
 
+bool driveRoomba(const char *commands) {
+  StaticJsonDocument<200> doc;
+  DeserializationError error = deserializeJson(doc, commands);
+  if (error) {
+    DLOG("Invalid drive commands: %s\n", error.c_str());
+    return false;
+  }
+  int16_t velocity = doc["velocity"];
+  int16_t radius = doc["radius"];
+  wakeup();
+  roomba.start();
+  delay(50);
+  roomba.safeMode();
+  delay(500);
+  DLOG("Switched to safeMode\n");
+  roomba.drive(velocity, radius);
+  
+  if(velocity == 0 && radius == 0) {
+    delay(100);
+    DLOG("Stop\n");
+    roomba.start(); // switch to Passive mode
+  }
+
+  return true;
+}
+
 void mqttCallback(char *topic, byte *payload, unsigned int length) {
   DLOG("Received mqtt callback for topic %s\n", topic);
   if (strcmp(commandTopic, topic) == 0) {
@@ -223,6 +250,16 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
 
     if(!performCommand(cmd)) {
       DLOG("Unknown command %s\n", cmd);
+    }
+    free(cmd);
+  } else if (strcmp(driveTopic, topic) == 0) {
+    // turn payload into a null terminated string
+    char *cmd = (char *)malloc(length + 1);
+    memcpy(cmd, payload, length);
+    cmd[length] = 0;
+
+    if(!driveRoomba(cmd)) {
+      DLOG("Invalid drive commands: %s\n", cmd);
     }
     free(cmd);
   }
@@ -258,19 +295,6 @@ void setDateTime() {
   #endif
 }
 
-void moveBack() {
-  roomba.fullMode();
-  delay(500);
-  DLOG("Switched to safeMode\n");
-  roomba.drive(-300, 0);
-  DLOG("Start back movement\n");
-  delay(5000);
-  roomba.drive(0, 0);
-  delay(100);
-  DLOG("Stop\n");
-  roomba.start(); // switch to Passive mode
-}
-
 void debugCallback() {
   #if LOGGING
   String cmd = Debug.getLastCommand();
@@ -280,9 +304,6 @@ void debugCallback() {
   } else if (cmd == "quit") {
     DLOG("Stopping Roomba\n");
     Serial.write(173);
-  } else if ( cmd == "back") {
-    DLOG("Move Roomba backward\n");
-    moveBack();
   } else if (cmd == "rreset") {
     DLOG("Resetting Roomba\n");
     roomba.reset();
@@ -524,6 +545,7 @@ void reconnect() {
   if (mqttClient.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWORD, lwtTopic, 0, false, lwtMessage)) {
     DLOG("MQTT connected\n");
     mqttClient.subscribe(commandTopic);
+    mqttClient.subscribe(driveTopic);
   } else {
     DLOG("MQTT failed rc=%d try again in 5 seconds\n", mqttClient.state());
     #if USE_SSL
