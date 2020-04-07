@@ -182,22 +182,40 @@ void maxClean() {
   roombaState.cleaning = true;
 }
 
-void playMerryChristmas() {
-  const uint8_t notes1[] = {76, 16, 76, 16, 76, 32, 76, 16, 76, 16, 76, 32, 76, 16, 79, 16, 72, 16, 74, 16, 76, 32, 77, 16, 77, 16, 77, 16, 77, 32, 77, 16};
-  const uint8_t notes2[] = {76, 16, 76, 32, 79, 16, 79, 16, 77, 16, 74, 16, 72, 32};
+void playSong(const uint8_t *notes, int len) {
   wakeup();
   roomba.start();
   delay(50);
   roomba.safeMode();
   delay(50);
-  roomba.song(0, notes1, sizeof(notes1));
-  roomba.song(1, notes2, sizeof(notes2));
-  delay(50);
-  roomba.playSong(0);
-  delay(5010); // wait until first song is completed
-  roomba.playSong(1);
+  int chunkNum = ceil(len / 32.0);
+  for (int i = 0; i < chunkNum; i++) {
+    int first = i * 32 * sizeof(uint8_t);
+    int length = i == chunkNum-1? len - i*32 : 32;
+    length *= sizeof(uint8_t);
+    uint8_t *chunk = (uint8_t*)malloc(len);
+    memcpy(chunk, notes + first, length);
+    int duration = 0;
+    for (int j = 0; j < length; j++) {
+        duration += (j + 1) % 2 == 0 ? chunk[j] : 0;
+    }
+    int ms = duration/64 * 1000 + 10;
+    roomba.song(0, chunk, length);
+    delay(50);
+    roomba.playSong(0);
+    delay(ms);
+  }
 }
 
+void playMerryChristmas() {
+  const uint8_t notes[] = {76,16,76,16,76,32,76,16,76,16,76,32,76,16,79,16,72,16,74,16,76,32,77,16,77,16,77,16,77,32,77,16,76,16,76,32,79,16,79,16,77,16,74,16,72,32};
+  playSong(notes, sizeof(notes));
+}
+
+void playHappyBirthday() {
+  const uint8_t notes[] = {72,16,72,16,74,32,72,32,89,32,52,32,72,16,72,16,74,32,72,32,91,32,77,32,72,16,72,16,84,32,69,32,89,32,76,32,74,32,70,16,70,16,69,32,77,32,79,32,77,32};
+  playSong(notes, sizeof(notes));
+}
 
 bool performCommand(const char *cmdchar) {
   // Char* string comparisons dont always work
