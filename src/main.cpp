@@ -217,6 +217,11 @@ void playHappyBirthday() {
   playSong(notes, sizeof(notes));
 }
 
+void locate() {
+  const uint8_t notes[] = {81,16,82,16,83,16,84,16,85,16,86,16,87,16,88,16,89,16,90,16,91,16,92,16};
+  playSong(notes, sizeof(notes));
+}
+
 bool performCommand(const char *cmdchar) {
   // Char* string comparisons dont always work
   String cmd(cmdchar);
@@ -233,8 +238,7 @@ bool performCommand(const char *cmdchar) {
   } else if (cmd == "clean_spot") {
     cleanSpot();
   } else if (cmd == "locate") {
-    DLOG("Locating\n");
-    playMerryChristmas();
+    locate();
   } else if (cmd == "max_clean") {
     maxClean();
   } else if (cmd == "return_to_base") {
