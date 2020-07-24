@@ -79,6 +79,7 @@ PubSubClient mqttClient(wifiClient);
 const PROGMEM char *commandTopic = MQTT_COMMAND_TOPIC;
 const PROGMEM char *statusTopic = MQTT_STATE_TOPIC;
 const PROGMEM char *driveTopic = MQTT_DRIVE_TOPIC;
+const PROGMEM char *songTopic = MQTT_SONG_TOPIC;
 const PROGMEM char *lwtTopic = MQTT_LWT_TOPIC;
 const PROGMEM char *lwtMessage = MQTT_LWT_MESSAGE;
 
@@ -277,6 +278,23 @@ bool driveRoomba(const char *commands) {
   return true;
 }
 
+bool performPlaySong(const char *data) {
+  DynamicJsonDocument doc(2048);
+  DeserializationError error = deserializeJson(doc, data);
+  if (error) {
+    DLOG("Invalid song data: %s\n", error.c_str());
+    return false;
+  }
+
+  JsonArray array = doc.as<JsonArray>();
+  int len = array.size();
+  uint8_t notes[len];
+  for(int i = 0; i < len; i++)
+    notes[i] = (uint8_t)array.getElement(i);
+  playSong(notes, len);
+  return true;
+}
+
 void mqttCallback(char *topic, byte *payload, unsigned int length) {
   DLOG("Received mqtt callback for topic %s\n", topic);
   if (strcmp(commandTopic, topic) == 0) {
@@ -297,6 +315,16 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
 
     if(!driveRoomba(cmd)) {
       DLOG("Invalid drive commands: %s\n", cmd);
+    }
+    free(cmd);
+  } else if (strcmp(songTopic, topic) == 0) {
+    // turn payload into a null terminated string
+    char *cmd = (char *)malloc(length + 1);
+    memcpy(cmd, payload, length);
+    cmd[length] = 0;
+
+    if(!performPlaySong(cmd)) {
+      DLOG("Invalid notes: %s\n", cmd);
     }
     free(cmd);
   }
@@ -583,6 +611,7 @@ void reconnect() {
     DLOG("MQTT connected\n");
     mqttClient.subscribe(commandTopic);
     mqttClient.subscribe(driveTopic);
+    mqttClient.subscribe(songTopic);
   } else {
     DLOG("MQTT failed rc=%d try again in 5 seconds\n", mqttClient.state());
     #if USE_SSL
