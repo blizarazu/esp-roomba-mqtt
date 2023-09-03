@@ -4,7 +4,7 @@
 #include <ArduinoOTA.h>
 #include <Roomba.h>
 #include <PubSubClient.h>
-#include <ArduinoJson.h>
+#include <jsmn.h>
 #include <TZ.h>
 #include "config.h"
 extern "C" {
@@ -288,15 +288,45 @@ char* getMQTTTopic(const char* topic) {
   return mqttTopic;
 }
 
+static int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
+  if (tok->type == JSMN_STRING && (int)strlen(s) == tok->end - tok->start &&
+      strncmp(json + tok->start, s, tok->end - tok->start) == 0) {
+    return 0;
+  }
+  return -1;
+}
+
 bool driveRoomba(const char *commands) {
-  StaticJsonDocument<200> doc;
-  DeserializationError error = deserializeJson(doc, commands);
-  if (error) {
-    DLOG("Invalid drive commands: %s\n", error.c_str());
+  jsmn_parser parser;
+  jsmn_init(&parser);
+  int jsonlen = jsmn_parse(&parser, commands, strlen(commands), NULL, 0);
+
+  jsmn_init(&parser);
+  jsmntok_t tokens[jsonlen];
+  int r = jsmn_parse(&parser, commands, strlen(commands), tokens, sizeof(tokens)/sizeof(tokens[0]));
+  if(r < 0) {
+    printf("Failed to parse JSON: %d\n", r);
     return false;
   }
-  int16_t velocity = doc["velocity"];
-  int16_t radius = doc["radius"];
+  if(r < 1 || tokens[0].type != JSMN_OBJECT) {
+    printf("Object expected. Type: %d\n", tokens[0].type);
+    return false;
+  }
+
+  int16_t velocity, radius;
+  for(int i = 1; i < r; i++) {
+    if(jsoneq(commands, &tokens[i], "velocity") == 0) {
+        jsmntok_t *t = &tokens[i + 1];
+        char vel[t->end - t->start];
+        strncpy(vel, &commands[t->start], t->end - t->start);
+        velocity = (int16_t)atoi(vel);
+    } else if(jsoneq(commands, &tokens[i], "radius") == 0) {
+        jsmntok_t *t = &tokens[i + 1];
+        char rad[t->end - t->start];
+        strncpy(rad, &commands[t->start], t->end - t->start);
+        radius = (int16_t)atoi(rad);
+    }
+  }
   wakeup();
   roomba.start();
   delay(50);
@@ -315,18 +345,30 @@ bool driveRoomba(const char *commands) {
 }
 
 bool performPlaySong(const char *data) {
-  DynamicJsonDocument doc(2048);
-  DeserializationError error = deserializeJson(doc, data);
-  if (error) {
-    DLOG("Invalid song data: %s\n", error.c_str());
+  jsmn_parser parser;
+  jsmn_init(&parser);
+  int jsonlen = jsmn_parse(&parser, data, strlen(data), NULL, 0);
+
+  jsmn_init(&parser);
+  jsmntok_t tokens[jsonlen];
+  int r = jsmn_parse(&parser, data, strlen(data), tokens, sizeof(tokens)/sizeof(tokens[0]));
+  if(r < 0) {
+    DLOG("Failed to parse JSON: %d\n", r);
+    return false;
+  }
+  if(r < 1 || tokens[0].type != JSMN_ARRAY) {
+    DLOG("Array expected. Type: %d\n", tokens[0].type);
     return false;
   }
 
-  JsonArray array = doc.as<JsonArray>();
-  int len = array.size();
+  int len = tokens[0].size;
   uint8_t notes[len];
-  for(int i = 0; i < len; i++)
-    notes[i] = (uint8_t)array.getElement(i);
+  for(int i = 0; i < len; i++) {
+    jsmntok_t *note = &tokens[i + 1];
+    char notestr[note->end - note->start];
+    strncpy(notestr, &data[note->start], note->end - note->start);
+    notes[i] = (uint8_t)atoi(notestr);
+  }
   playSong(notes, len);
   return true;
 }
@@ -677,25 +719,28 @@ void sendStatus() {
     return;
   }
   DLOG("Reporting packet Distance:%dmm ChargingState:%d Voltage:%dmV Current:%dmA Charge:%dmAh Capacity:%dmAh\n", roombaState.distance, roombaState.chargingState, roombaState.voltage, roombaState.current, roombaState.charge, roombaState.capacity);
-  StaticJsonDocument<300> root;
-  root["battery_level"] = (roombaState.capacity) ? (roombaState.charge * 100)/roombaState.capacity : 0;
-  root["cleaning"] = roombaState.cleaning;
-  root["docked"] = roombaState.chargingSourcesAvailable == Roomba::ChargeAvailableDock;
-  root["charging"] = roombaState.chargingState == Roomba::ChargeStateReconditioningCharging
+  String json = "{";
+  int16_t batteryLevel = (roombaState.capacity) ? (roombaState.charge * 100)/roombaState.capacity : 0;
+  json += "\"battery_level\":" + batteryLevel;
+  json += ",\"cleaning\":" + roombaState.cleaning;
+  boolean docked = roombaState.chargingSourcesAvailable == Roomba::ChargeAvailableDock;
+  json += ",\"docked\":" + docked;
+  boolean isCharging = roombaState.chargingState == Roomba::ChargeStateReconditioningCharging
   || roombaState.chargingState == Roomba::ChargeStateFullCharging
   || roombaState.chargingState == Roomba::ChargeStateTrickleCharging;
-  root["chargingState"] = roombaState.chargingState;
-  root["voltage"] = roombaState.voltage;
-  root["current"] = roombaState.current;
-  root["charge"] = roombaState.charge;
-  root["capacity"] = roombaState.capacity;
-  root["distance"] = roombaState.distance;
-  root["batteryTemperature"] = roombaState.temp;
-  root["chargingSourcesAvailable"] = roombaState.chargingSourcesAvailable;
-  root["OIMode"] = roombaState.OIMode;
-  String jsonStr;
-  serializeJson(root, jsonStr);
-  mqttClient.publish(statusTopic, jsonStr.c_str());
+  json += ",\"charging\":" + isCharging;
+  json += ",\"chargingState\":" + roombaState.chargingState;
+  json += ",\"voltage\":" + roombaState.voltage;
+  json += ",\"current\":" + roombaState.current;
+  json += ",\"charge\":" + roombaState.charge;
+  json += ",\"capacity\":" + roombaState.capacity;
+  json += ",\"distance\":" + roombaState.distance;
+  json += ",\"batteryTemperature\":" + roombaState.temp ;
+  json += ",\"chargingSourcesAvailable\":" + roombaState.chargingSourcesAvailable;
+  json += ",\"OIMode\":" + roombaState.OIMode;
+  json += ",\"state\":" + getCurrentState();
+  json += "}";
+  mqttClient.publish(getMQTTTopic(statusTopic), json.c_str());
 }
 
 int lastStateMsgTime = 0;
