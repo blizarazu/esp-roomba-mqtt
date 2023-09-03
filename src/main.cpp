@@ -701,6 +701,41 @@ void reconnect() {
   }
 }
 
+void sendConfig() {
+  if (!mqttClient.connected()) {
+    DLOG("MQTT Disconnected, not sending config\n");
+    return;
+  }
+  String json = "{";
+  json += "\"name\":" + String("Roomba ") + getMAC() + ",";
+  json += "\"unique_id\":";
+  json += getEntityID();
+  json += ",";
+  json += "\"schema\":state,";
+  char baseTopic[200];
+  sprintf(baseTopic, "%s%s", MQTT_TOPIC_BASE, getEntityID());
+  json += "\"~\":";
+  json += baseTopic;
+  json += ",";
+  json += "\"stat_t\":" + String("~/") + statusTopic + ",";
+  json += "\"cmd_t\":" + String("~/") + commandTopic + ",";
+  json += "\"send_cmd_t\":" + String("~/") + commandTopic + ",";
+  json += "\"json_attr_t\":" + String("~/") + statusTopic + ",";
+  json += "\"sup_feat\":[\"start\",\"stop\",\"pause\",\"return_home\",\"locate\",\"clean_spot\"],";
+  json += "\"dev\":{";
+  json +=     "\"name\":" + String("Roomba ") + getMAC() + ",";
+  json +=     "\"ids\":[";
+  json +=         getEntityID();
+  json +=     "],";
+  json +=     "\"mf\":iRobot,";
+  json +=     "\"mdl\":";
+  json +=     ROOMBA_MODEL;
+  json +=     "}";
+  json += "}";
+  DLOG("Reporting config: %s\n", json.c_str());
+  mqttClient.publish(getMQTTTopic(configTopic), json.c_str());
+}
+
 String getCurrentState() {
   String curState = "idle";
   if (roombaState.docked)
@@ -746,6 +781,7 @@ void sendStatus() {
 int lastStateMsgTime = 0;
 int lastWakeupTime = 0;
 int lastConnectTime = 0;
+int lastConfigSend = 0;
 
 void loop() {
   // Important callbacks that _must_ happen every cycle
@@ -765,7 +801,12 @@ void loop() {
   if (!mqttClient.connected() && (now - lastConnectTime) > RECONNECT_FREQ) {
     DLOG("Reconnecting MQTT\n");
     lastConnectTime = now;
+    lastConfigSend = now;
     reconnect();
+    sendConfig();
+  } else if((now - lastConfigSend) > CONFIG_SEND_FREQ) {
+    lastConfigSend = now;
+    sendConfig();
   }
 
   #if KEEP_ROOMBA_AWAKE
