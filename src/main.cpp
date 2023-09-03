@@ -44,6 +44,7 @@ typedef struct {
   // Derived state
   bool cleaning;
   bool docked;
+  bool returning;
 
   int timestamp;
   bool sent;
@@ -78,6 +79,7 @@ bool OTAStarted;
 PubSubClient mqttClient(wifiClient);
 const PROGMEM char *commandTopic = MQTT_COMMAND_TOPIC;
 const PROGMEM char *statusTopic = MQTT_STATE_TOPIC;
+const PROGMEM char *configTopic = MQTT_CONFIG_TOPIC;
 const PROGMEM char *driveTopic = MQTT_DRIVE_TOPIC;
 const PROGMEM char *songTopic = MQTT_SONG_TOPIC;
 const PROGMEM char *lwtTopic = MQTT_LWT_TOPIC;
@@ -121,6 +123,7 @@ void turnOn() {
   delay(50);
   roomba.cover();
   roombaState.cleaning = true;
+  roombaState.returning = false;
 }
 
 void turnOff() {
@@ -129,6 +132,7 @@ void turnOff() {
   delay(50);
   roomba.power();
   roombaState.cleaning = false;
+  roombaState.returning = false;
 }
 
 void stop() {
@@ -137,6 +141,7 @@ void stop() {
     roomba.start();
     delay(50);
     roomba.cover();
+    roombaState.returning = false;
   } else {
     DLOG("Not cleaning, can't stop\n");
   }
@@ -159,6 +164,7 @@ void cleanSpot() {
   delay(50);
   roomba.spot();
   roombaState.cleaning = true;
+  roombaState.returning = false;
 }
 
 void returnToBase() {
@@ -170,6 +176,7 @@ void returnToBase() {
   delay(50);
   roomba.dock();
   roombaState.cleaning = true;
+  roombaState.returning = true;
 }
 
 void maxClean() {
@@ -181,6 +188,7 @@ void maxClean() {
   delay(50);
   roomba.maxClean();
   roombaState.cleaning = true;
+  roombaState.returning = false;
 }
 
 void playSong(const uint8_t *notes, int len) {
@@ -232,7 +240,7 @@ bool performCommand(const char *cmdchar) {
     turnOn();
   } else if (cmd == "turn_off") {
     turnOff();
-  } else if (cmd == "toggle" || cmd == "start_pause") {
+  } else if (cmd == "start" || cmd == "pause") {
     toggle();
   } else if (cmd == "stop") {
     stop();
@@ -250,6 +258,34 @@ bool performCommand(const char *cmdchar) {
     return false;
   }
   return true;
+}
+
+void lowercase(char* str) {
+  for(char* c=str; *c=tolower(*c);++c);
+}
+
+char* getMAC(const char* divider = "") {
+  // build entity_id
+  byte MAC[6];
+  WiFi.macAddress(MAC);
+  static char MACc[30];
+  sprintf(MACc, "%02X%s%02X%s%02X%s%02X%s%02X%s%02X", MAC[0], divider, MAC[1], divider, MAC[2], divider, MAC[3], divider, MAC[4], divider, MAC[5]);
+  lowercase(MACc);
+  return MACc;
+}
+
+char* getEntityID(const char* prefix = MQTT_IDPREFIX) {
+  static char entityID[100];
+  sprintf(entityID, "%s%s", prefix, getMAC());
+  lowercase(entityID);
+  return entityID;
+}
+
+char* getMQTTTopic(const char* topic) {
+  // build mqtt target topic
+  static char mqttTopic[200];
+  sprintf(mqttTopic, "%s%s%s%s", MQTT_TOPIC_BASE, getEntityID(), MQTT_DIVIDER, topic);
+  return mqttTopic;
 }
 
 bool driveRoomba(const char *commands) {
@@ -297,7 +333,7 @@ bool performPlaySong(const char *data) {
 
 void mqttCallback(char *topic, byte *payload, unsigned int length) {
   DLOG("Received mqtt callback for topic %s\n", topic);
-  if (strcmp(commandTopic, topic) == 0) {
+  if (strcmp(getMQTTTopic(commandTopic), topic) == 0) {
     // turn payload into a null terminated string
     char *cmd = (char *)malloc(length + 1);
     memcpy(cmd, payload, length);
@@ -307,7 +343,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
       DLOG("Unknown command %s\n", cmd);
     }
     free(cmd);
-  } else if (strcmp(driveTopic, topic) == 0) {
+  } else if (strcmp(getMQTTTopic(driveTopic), topic) == 0) {
     // turn payload into a null terminated string
     char *cmd = (char *)malloc(length + 1);
     memcpy(cmd, payload, length);
@@ -317,7 +353,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
       DLOG("Invalid drive commands: %s\n", cmd);
     }
     free(cmd);
-  } else if (strcmp(songTopic, topic) == 0) {
+  } else if (strcmp(getMQTTTopic(songTopic), topic) == 0) {
     // turn payload into a null terminated string
     char *cmd = (char *)malloc(length + 1);
     memcpy(cmd, payload, length);
@@ -443,7 +479,7 @@ void sleepIfNecessary() {
       root["charge"] = 0;
       String jsonStr;
       serializeJson(root, jsonStr);
-      mqttClient.publish(statusTopic, jsonStr.c_str(), true);
+      mqttClient.publish(getMQTTTopic(stateTopic), jsonStr.c_str(), true);
     }
     delay(200);
 
@@ -542,6 +578,7 @@ void readSensorPacket() {
         roombaState.cleaning = true;
       } else if (roombaState.current > -50) {
         roombaState.docked = true;
+        roombaState.returning = false;
       }
     } else {
       VLOG("Failed to parse packet, packetLength:%d, Temperature:%d\n", packetLength, rs.temp);
@@ -576,7 +613,7 @@ void setup() {
   ArduinoOTA.begin();
   ArduinoOTA.onStart(onOTAStart);
 
-  // Synchronize time useing SNTP. This is necessary to verify that
+  // Synchronize time using SNTP. This is necessary to verify that
   // the TLS certificates offered by the server are currently valid.
   setDateTime();
   #if USE_SSL
@@ -607,11 +644,11 @@ void setup() {
 void reconnect() {
   DLOG("Attempting MQTT connection...\n");
   // Attempt to connect
-  if (mqttClient.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWORD, lwtTopic, 0, false, lwtMessage)) {
+  if (mqttClient.connect(getEntityID(HOSTNAME_PREFIX), MQTT_USER, MQTT_PASSWORD, getMQTTTopic(lwtTopic), 0, false, lwtMessage)) {
     DLOG("MQTT connected\n");
-    mqttClient.subscribe(commandTopic);
-    mqttClient.subscribe(driveTopic);
-    mqttClient.subscribe(songTopic);
+    mqttClient.subscribe(getMQTTTopic(commandTopic));
+    mqttClient.subscribe(getMQTTTopic(driveTopic));
+    mqttClient.subscribe(getMQTTTopic(songTopic));
   } else {
     DLOG("MQTT failed rc=%d try again in 5 seconds\n", mqttClient.state());
     #if USE_SSL
@@ -620,6 +657,18 @@ void reconnect() {
     DLOG("MQTT SSL Error: %d - %s\n", ernum, buf);
     #endif
   }
+}
+
+String getCurrentState() {
+  String curState = "idle";
+  if (roombaState.docked)
+    curState = "docked";
+  else if (roombaState.cleaning)
+    curState = "cleaning";
+  else if(roombaState.returning)
+    curState = "returning";
+  
+  return curState;
 }
 
 void sendStatus() {
@@ -668,7 +717,7 @@ void loop() {
 
   long now = millis();
   // If MQTT client can't connect to broker, then reconnect
-  if (!mqttClient.connected() && (now - lastConnectTime) > 5000) {
+  if (!mqttClient.connected() && (now - lastConnectTime) > RECONNECT_FREQ) {
     DLOG("Reconnecting MQTT\n");
     lastConnectTime = now;
     reconnect();
@@ -676,7 +725,7 @@ void loop() {
 
   #if KEEP_ROOMBA_AWAKE
   // Wakeup the roomba at fixed intervals
-  if (now - lastWakeupTime > 50000) {
+  if (now - lastWakeupTime > WEKEUP_FREQ) {
     lastWakeupTime = now;
     if (!roombaState.cleaning) {
       if (roombaState.docked) {
@@ -692,7 +741,7 @@ void loop() {
   #endif
 
   // Report the status over mqtt at fixed intervals
-  if (now - lastStateMsgTime > 10000) {
+  if (now - lastStateMsgTime > STATUS_REPORT_FREQ) {
     lastStateMsgTime = now;
     if (now - roombaState.timestamp > 30000 || roombaState.sent) {
       DLOG("Roomba state already sent (%.1fs old)\n", (now - roombaState.timestamp)/1000.0);

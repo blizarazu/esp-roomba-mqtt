@@ -15,13 +15,29 @@
 #define ADC_VOLTAGE_DIVIDER 44.551316985
 #define ENABLE_ADC_SLEEP 0
 
-#define MQTT_CLIENT_ID "roomba.local"
+#define RECONNECT_FREQ 5000
+#define CONFIG_SEND_FREQ 120000
+#define STATUS_REPORT_FREQ 10000
+#define WAKEUP_FREQ 50000
+
+#define ROOMBA_MODEL "Roomba 780"
+
+#define HOSTNAME_PREFIX "roomba-"
+
 #define MQTT_SERVER "10.0.0.2"
 #define MQTT_USER "homeassistant"
 #define MQTT_PORT 1883
-#define MQTT_COMMAND_TOPIC "vacuum/command"
-#define MQTT_STATE_TOPIC "vacuum/state"
-#define MQTT_DRIVE_TOPIC "vacuum/drive"
-#define MQTT_SONG_TOPIC "vacuum/play_song"
-#define MQTT_LWT_TOPIC "vacuum/LWT"
+
+#define MQTT_DISCOVERY "homeassistant"
+#define MQTT_DEVICE_CLASS "vacuum"
+#define MQTT_DIVIDER "/"
+#define MQTT_TOPIC_BASE MQTT_DISCOVERY MQTT_DIVIDER MQTT_DEVICE_CLASS MQTT_DIVIDER
+#define MQTT_IDPREFIX "roomba_"
+#define MQTT_COMMAND_TOPIC "command"
+#define MQTT_STATE_TOPIC "state"
+#define MQTT_CONFIG_TOPIC "config"
+
+#define MQTT_DRIVE_TOPIC "drive"
+#define MQTT_SONG_TOPIC "play_song"
+#define MQTT_LWT_TOPIC "LWT"
 #define MQTT_LWT_MESSAGE "Online"
