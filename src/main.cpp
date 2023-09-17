@@ -798,6 +798,10 @@ void sendStatus() {
   json += ",\"chargingSourcesAvailable\":" + String(roombaState.chargingSourcesAvailable);
   json += ",\"OIMode\":" + String(roombaState.OIMode);
   json += ",\"state\":\"" + String(getCurrentState()) + "\"";
+  json += ",\"ssid\":\"" + String(WiFi.SSID()) + "\"";
+  json += ",\"rssi\":" + String(WiFi.RSSI());
+  json += ",\"ip\":\"" + String(WiFi.localIP().toString()) + "\"";
+  json += ",\"hostname\":\"" + String(WiFi.getHostname()) + "\"";
   json += "}";
   mqttClient.publish(getMQTTTopic(statusTopic), json.c_str());
 }
