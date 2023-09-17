@@ -610,6 +610,9 @@ void readSensorPacket() {
     bool parsed = parseRoombaStateFromStreamPacket(roombaPacket, packetLength, &rs);
     verboseLogPacket(roombaPacket, packetLength);
     if (parsed && rs.temp != 0) {
+      rs.cleaning = roombaState.cleaning;
+      rs.docked = roombaState.docked;
+      rs.returning = roombaState.returning;
       roombaState = rs;
       VLOG("Got Packet of len=%d! OIMode:%d Distance:%dmm ChargingState:%d Voltage:%dmV Current:%dmA Charge:%dmAh Capacity:%dmAh\n", packetLength, roombaState.OIMode, roombaState.distance, roombaState.chargingState, roombaState.voltage, roombaState.current, roombaState.charge, roombaState.capacity);
       roombaState.cleaning = false;
@@ -752,10 +755,10 @@ String getCurrentState() {
   String curState = "idle";
   if (roombaState.docked)
     curState = "docked";
-  else if (roombaState.cleaning)
-    curState = "cleaning";
   else if(roombaState.returning)
     curState = "returning";
+  else if (roombaState.cleaning)
+    curState = "cleaning";
   
   return curState;
 }
