@@ -236,13 +236,11 @@ bool performCommand(const char *cmdchar) {
   String cmd(cmdchar);
 
   // MQTT protocol commands
-  if (cmd == "turn_on" || cmd == "clean") {
+  if (cmd == "turn_on" || cmd == "clean" || cmd == "start") {
     turnOn();
   } else if (cmd == "turn_off") {
     turnOff();
-  } else if (cmd == "start" || cmd == "pause") {
-    toggle();
-  } else if (cmd == "stop") {
+  } else if (cmd == "stop" || cmd == "pause") {
     stop();
   } else if (cmd == "clean_spot") {
     cleanSpot();
