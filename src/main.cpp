@@ -654,8 +654,12 @@ void setup() {
   }
 
   ArduinoOTA.setHostname((const char *)hostname.c_str());
-  ArduinoOTA.begin();
   ArduinoOTA.onStart(onOTAStart);
+  ArduinoOTA.onError([](ota_error_t error) {
+    OTAStarted = false;
+    roomba.streamCommand(Roomba::StreamCommandResume);
+  });
+  ArduinoOTA.begin();
 
   // Synchronize time using SNTP. This is necessary to verify that
   // the TLS certificates offered by the server are currently valid.
