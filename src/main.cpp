@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266mDNS.h>
 #include <ArduinoOTA.h>
 #include <Roomba.h>
 #include <PubSubClient.h>
@@ -85,6 +84,15 @@ const PROGMEM char *driveTopic = MQTT_DRIVE_TOPIC;
 const PROGMEM char *songTopic = MQTT_SONG_TOPIC;
 const PROGMEM char *lwtTopic = MQTT_LWT_TOPIC;
 const PROGMEM char *lwtMessage = MQTT_LWT_MESSAGE;
+
+// Timing state (declared here so mqttCallback can access lastStateMsgTime)
+int lastStateMsgTime = 0;
+int lastWakeupTime = 0;
+int lastConnectTime = 0;
+int lastConfigSend = 0;
+
+// Forward declaration so mqttCallback can call sendStatus()
+void sendStatus();
 
 void wakeup() {
   DLOG("Wakeup Roomba\n");
@@ -204,6 +212,7 @@ void playSong(const uint8_t *notes, int len) {
     roomba.song(0, chunk, length);
     delay(50);
     roomba.playSong(0);
+    free(chunk);
     delay(ms);
   }
 }
@@ -361,7 +370,10 @@ void mqttCallback(char *topic, byte *payload, unsigned int length) {
     memcpy(cmd, payload, length);
     cmd[length] = 0;
 
-    if(!performCommand(cmd)) {
+    if(performCommand(cmd)) {
+      sendStatus();                      // Immediate state feedback to HA
+      lastStateMsgTime = millis();       // Reset timer to avoid duplicate publish
+    } else {
       DLOG("Unknown command %s\n", cmd);
     }
     free(cmd);
@@ -627,6 +639,9 @@ void setup() {
 
   // Set Hostname.
   String hostname(HOSTNAME);
+  WiFi.persistent(false);       // Don't write credentials to flash on every connect
+  WiFi.setAutoReconnect(true);  // SDK-level auto-reconnect on WiFi drop
+  WiFi.setSleepMode(WIFI_MODEM_SLEEP); // Modem sleep between beacons (~20-30% WiFi power saving)
   WiFi.hostname(hostname);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -646,6 +661,7 @@ void setup() {
   #endif
 
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
+  mqttClient.setKeepAlive(60);
   mqttClient.setCallback(mqttCallback);
 
   #if LOGGING
@@ -822,11 +838,6 @@ void sendStatus() {
   mqttClient.publish(getMQTTTopic(statusTopic), json.c_str());
 }
 
-int lastStateMsgTime = 0;
-int lastWakeupTime = 0;
-int lastConnectTime = 0;
-int lastConfigSend = 0;
-
 void loop() {
   // Important callbacks that _must_ happen every cycle
   ArduinoOTA.handle();
@@ -841,6 +852,12 @@ void loop() {
   }
 
   long now = millis();
+  // WiFi watchdog: if WiFi dropped, attempt reconnect and skip MQTT logic
+  if (WiFi.status() != WL_CONNECTED) {
+    DLOG("WiFi disconnected, reconnecting...\n");
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    return;
+  }
   // If MQTT client can't connect to broker, then reconnect
   if (!mqttClient.connected() && (now - lastConnectTime) > RECONNECT_FREQ) {
     DLOG("Reconnecting MQTT\n");
