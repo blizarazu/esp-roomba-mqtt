@@ -189,6 +189,7 @@ void maxClean() {
   roomba.maxClean();
   roombaState.cleaning = true;
   roombaState.returning = false;
+  roombaState.paused = false;
 }
 
 void playSong(const uint8_t *notes, int len) {
@@ -294,11 +295,11 @@ bool driveRoomba(const char *commands) {
   jsmntok_t tokens[jsonlen];
   int r = jsmn_parse(&parser, commands, strlen(commands), tokens, sizeof(tokens)/sizeof(tokens[0]));
   if(r < 0) {
-    printf("Failed to parse JSON: %d\n", r);
+    DLOG("Failed to parse JSON: %d\n", r);
     return false;
   }
   if(r < 1 || tokens[0].type != JSMN_OBJECT) {
-    printf("Object expected. Type: %d\n", tokens[0].type);
+    DLOG("Object expected. Type: %d\n", tokens[0].type);
     return false;
   }
 
@@ -306,13 +307,15 @@ bool driveRoomba(const char *commands) {
   for(int i = 1; i < r; i++) {
     if(jsoneq(commands, &tokens[i], "velocity") == 0) {
         jsmntok_t *t = &tokens[i + 1];
-        char vel[t->end - t->start];
+        char vel[t->end - t->start + 1];
         strncpy(vel, &commands[t->start], t->end - t->start);
+        vel[t->end - t->start] = '\0';
         velocity = (int16_t)atoi(vel);
     } else if(jsoneq(commands, &tokens[i], "radius") == 0) {
         jsmntok_t *t = &tokens[i + 1];
-        char rad[t->end - t->start];
+        char rad[t->end - t->start + 1];
         strncpy(rad, &commands[t->start], t->end - t->start);
+        rad[t->end - t->start] = '\0';
         radius = (int16_t)atoi(rad);
     }
   }
@@ -423,7 +426,7 @@ void setDateTime() {
   struct tm * timeinfo;
   time(&now);
   timeinfo = localtime(&now);
-  #ifdef SET_ROOMBA_CLOCK
+  #if SET_ROOMBA_CLOCK
   wakeup();
   roomba.start();
   roomba.setDayTime(timeinfo->tm_wday, timeinfo->tm_hour, timeinfo->tm_min);
@@ -504,15 +507,15 @@ void sleepIfNecessary() {
     // Fire off a quick message with our most recent state, if MQTT is connected
     DLOG("Battery voltage is low (%.1fV). Sleeping for 10 minutes\n", mV / 1000);
     if (mqttClient.connected()) {
-      String json = "{";
-      json += "\"battery_level\":\" 0,";
-      json += "\"cleaning\":\" false";
-      json += "\"docked\":\" false";
-      json += "\"charging\":\" false";
-      json += "\"voltage\":\"";
-      json += String(mV / 1000);
-      json += "\"charge\":\" 0";
-      json += "}";
+      String json = F("{");
+      json += F("\"battery_level\":0,");
+      json += F("\"cleaning\":false,");
+      json += F("\"docked\":false,");
+      json += F("\"charging\":false,");
+      json += F("\"voltage\":"); json += String(mV / 1000); json += F(",");
+      json += F("\"charge\":0,");
+      json += F("\"state\":\"idle\"");
+      json += F("}");
       mqttClient.publish(getMQTTTopic(statusTopic), json.c_str(), true);
     }
     delay(200);
@@ -607,6 +610,7 @@ void readSensorPacket() {
       rs.cleaning = roombaState.cleaning;
       rs.docked = roombaState.docked;
       rs.returning = roombaState.returning;
+      rs.paused = roombaState.paused;
       roombaState = rs;
       VLOG("Got Packet of len=%d! OIMode:%d Distance:%dmm ChargingState:%d Voltage:%dmV Current:%dmA Charge:%dmAh Capacity:%dmAh\n", packetLength, roombaState.OIMode, roombaState.distance, roombaState.chargingState, roombaState.voltage, roombaState.current, roombaState.charge, roombaState.capacity);
       roombaState.cleaning = false;
