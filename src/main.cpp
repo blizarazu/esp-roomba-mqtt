@@ -302,7 +302,7 @@ bool driveRoomba(const char *commands) {
     return false;
   }
 
-  int16_t velocity, radius;
+  int16_t velocity = 0, radius = 0;
   for(int i = 1; i < r; i++) {
     if(jsoneq(commands, &tokens[i], "velocity") == 0) {
         jsmntok_t *t = &tokens[i + 1];
