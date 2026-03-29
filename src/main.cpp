@@ -108,13 +108,6 @@ void wakeOnDock() {
 #endif
 }
 
-void wakeOffDock() {
-  DLOG("Wakeup Roomba off Dock\n");
-  Serial.write(131); // Safe mode
-  delay(300);
-  Serial.write(130); // Passive mode
-}
-
 void turnOn() {
   DLOG("Turning on\n");
   wakeup();
@@ -150,14 +143,6 @@ void stop() {
   } else {
     DLOG("Not cleaning, can't stop\n");
   }
-}
-
-void toggle() {
-  DLOG("Toggling\n");
-  if (roombaState.cleaning)
-    stop();
-  else
-    turnOn();
 }
 
 void cleanSpot() {
@@ -221,16 +206,6 @@ void playSong(const uint8_t *notes, int len) {
     roomba.playSong(0);
     delay(ms);
   }
-}
-
-void playMerryChristmas() {
-  const uint8_t notes[] = {76,16,76,16,76,32,76,16,76,16,76,32,76,16,79,16,72,16,74,16,76,32,77,16,77,16,77,16,77,32,77,16,76,16,76,32,79,16,79,16,77,16,74,16,72,32};
-  playSong(notes, sizeof(notes));
-}
-
-void playHappyBirthday() {
-  const uint8_t notes[] = {72,16,72,16,74,32,72,32,89,32,52,32,72,16,72,16,74,32,72,32,91,32,77,32,72,16,72,16,84,32,69,32,89,32,76,32,74,32,70,16,70,16,69,32,77,32,79,32,77,32};
-  playSong(notes, sizeof(notes));
 }
 
 void locate() {
@@ -725,33 +700,24 @@ void sendConfig() {
   }
   char baseTopic[200];
   sprintf(baseTopic, "%s%s", MQTT_TOPIC_BASE, getEntityID());
-  String json = "{";
-  json += "\"name\":\"" + String(ROOMBA_FRIENDLY_NAME) + "\",";
-  json += "\"unique_id\":\"" + String(getEntityID()) + "\",";
-  json += "\"~\":\"" + String(baseTopic) + "\",";
-  json += "\"stat_t\":\"~/state\",";
-  json += "\"cmd_t\":\"~/command\",";
-  json += "\"send_cmd_t\":\"~/command\",";
-  json += "\"json_attr_t\":\"~/state\",";
-  json += "\"avty_t\":\"~/LWT\",";
-  json += "\"pl_avail\":\"online\",";
-  json += "\"pl_not_avail\":\"offline\",";
-  json += "\"sup_feat\":[";
-  json +=   "\"start\",";
-  json +=   "\"stop\",";
-  json +=   "\"pause\",";
-  json +=   "\"return_home\",";
-  json +=   "\"locate\",";
-  json +=   "\"clean_spot\",";
-  json +=   "\"send_command\"";
-  json += "],";
-  json += "\"dev\":{";
-  json +=   "\"name\":\"" + String(ROOMBA_MODEL) + "\",";
-  json +=   "\"ids\":[\"" + String(getEntityID()) + "\"],";
-  json +=   "\"mf\":\"iRobot\",";
-  json +=   "\"mdl\":\"" + String(ROOMBA_MODEL) + "\"";
-  json += "}";
-  json += "}";
+  String json = F("{");
+  json += F("\"name\":\""); json += ROOMBA_FRIENDLY_NAME; json += F("\",");
+  json += F("\"unique_id\":\""); json += getEntityID(); json += F("\",");
+  json += F("\"~\":\""); json += baseTopic; json += F("\",");
+  json += F("\"stat_t\":\"~/state\",");
+  json += F("\"cmd_t\":\"~/command\",");
+  json += F("\"send_cmd_t\":\"~/command\",");
+  json += F("\"json_attr_t\":\"~/state\",");
+  json += F("\"avty_t\":\"~/LWT\",");
+  json += F("\"pl_avail\":\"online\",");
+  json += F("\"pl_not_avail\":\"offline\",");
+  json += F("\"sup_feat\":[\"start\",\"stop\",\"pause\",\"return_home\",\"locate\",\"clean_spot\",\"send_command\"],");
+  json += F("\"dev\":{");
+  json += F("\"name\":\""); json += ROOMBA_MODEL; json += F("\",");
+  json += F("\"ids\":[\""); json += getEntityID(); json += F("\"],");
+  json += F("\"mf\":\"iRobot\",");
+  json += F("\"mdl\":\""); json += ROOMBA_MODEL; json += F("\"");
+  json += F("}}");
   DLOG("Reporting vacuum config: %s\n", json.c_str());
   mqttClient.publish(getMQTTTopic(configTopic), json.c_str(), true);
 }
@@ -763,19 +729,19 @@ void sendBatterySensorConfig() {
   }
   String statTopic = String(getMQTTTopic(statusTopic));
   String avtyTopic = String(getMQTTTopic(lwtTopic));
-  String json = "{";
-  json += "\"name\":\"" + String(ROOMBA_FRIENDLY_NAME) + " Battery\",";
-  json += "\"unique_id\":\"" + String(getEntityID()) + "_battery\",";
-  json += "\"device_class\":\"battery\",";
-  json += "\"state_class\":\"measurement\",";
-  json += "\"unit_of_measurement\":\"%\",";
-  json += "\"stat_t\":\"" + statTopic + "\",";
-  json += "\"val_tpl\":\"{{value_json.battery_level}}\",";
-  json += "\"avty_t\":\"" + avtyTopic + "\",";
-  json += "\"pl_avail\":\"online\",";
-  json += "\"pl_not_avail\":\"offline\",";
-  json += "\"dev\":{\"ids\":[\"" + String(getEntityID()) + "\"]}";
-  json += "}";
+  String json = F("{");
+  json += F("\"name\":\""); json += ROOMBA_FRIENDLY_NAME; json += F(" Battery\",");
+  json += F("\"unique_id\":\""); json += getEntityID(); json += F("_battery\",");
+  json += F("\"device_class\":\"battery\",");
+  json += F("\"state_class\":\"measurement\",");
+  json += F("\"unit_of_measurement\":\"%\",");
+  json += F("\"stat_t\":\""); json += statTopic; json += F("\",");
+  json += F("\"val_tpl\":\"{{value_json.battery_level}}\",");
+  json += F("\"avty_t\":\""); json += avtyTopic; json += F("\",");
+  json += F("\"pl_avail\":\"online\",");
+  json += F("\"pl_not_avail\":\"offline\",");
+  json += F("\"dev\":{\"ids\":[\""); json += getEntityID(); json += F("\"]}");
+  json += F("}");
   DLOG("Reporting battery sensor config: %s\n", json.c_str());
   mqttClient.publish(getSensorDiscoveryTopic("sensor", "_battery"), json.c_str(), true);
 }
@@ -787,19 +753,19 @@ void sendChargingSensorConfig() {
   }
   String statTopic = String(getMQTTTopic(statusTopic));
   String avtyTopic = String(getMQTTTopic(lwtTopic));
-  String json = "{";
-  json += "\"name\":\"" + String(ROOMBA_FRIENDLY_NAME) + " Charging\",";
-  json += "\"unique_id\":\"" + String(getEntityID()) + "_charging\",";
-  json += "\"device_class\":\"battery_charging\",";
-  json += "\"stat_t\":\"" + statTopic + "\",";
-  json += "\"val_tpl\":\"{{value_json.charging | lower}}\",";
-  json += "\"pl_on\":\"true\",";
-  json += "\"pl_off\":\"false\",";
-  json += "\"avty_t\":\"" + avtyTopic + "\",";
-  json += "\"pl_avail\":\"online\",";
-  json += "\"pl_not_avail\":\"offline\",";
-  json += "\"dev\":{\"ids\":[\"" + String(getEntityID()) + "\"]}";
-  json += "}";
+  String json = F("{");
+  json += F("\"name\":\""); json += ROOMBA_FRIENDLY_NAME; json += F(" Charging\",");
+  json += F("\"unique_id\":\""); json += getEntityID(); json += F("_charging\",");
+  json += F("\"device_class\":\"battery_charging\",");
+  json += F("\"stat_t\":\""); json += statTopic; json += F("\",");
+  json += F("\"val_tpl\":\"{{value_json.charging | lower}}\",");
+  json += F("\"pl_on\":\"true\",");
+  json += F("\"pl_off\":\"false\",");
+  json += F("\"avty_t\":\""); json += avtyTopic; json += F("\",");
+  json += F("\"pl_avail\":\"online\",");
+  json += F("\"pl_not_avail\":\"offline\",");
+  json += F("\"dev\":{\"ids\":[\""); json += getEntityID(); json += F("\"]}");
+  json += F("}");
   DLOG("Reporting charging sensor config: %s\n", json.c_str());
   mqttClient.publish(getSensorDiscoveryTopic("binary_sensor", "_charging"), json.c_str(), true);
 }
@@ -827,36 +793,32 @@ void sendStatus() {
     return;
   }
   DLOG("Reporting packet Distance:%dmm ChargingState:%d Voltage:%dmV Current:%dmA Charge:%dmAh Capacity:%dmAh\n", roombaState.distance, roombaState.chargingState, roombaState.voltage, roombaState.current, roombaState.charge, roombaState.capacity);
-  String json = "{";
   int16_t batteryLevel = (roombaState.capacity) ? (roombaState.charge * 100)/roombaState.capacity : 0;
-  json += "\"battery_level\":" + String(batteryLevel);
-  json += ",\"cleaning\":";
-  json += boolToString(roombaState.cleaning);
-  json += ",\"returning\":";
-  json += boolToString(roombaState.returning);
   boolean docked = roombaState.chargingSourcesAvailable == Roomba::ChargeAvailableDock;
-  json += ",\"docked\":";
-  json += boolToString(docked);
   boolean isCharging = roombaState.chargingState == Roomba::ChargeStateReconditioningCharging
-  || roombaState.chargingState == Roomba::ChargeStateFullCharging
-  || roombaState.chargingState == Roomba::ChargeStateTrickleCharging;
-  json += ",\"charging\":";
-  json += boolToString(isCharging);
-  json += ",\"chargingState\":" + String(roombaState.chargingState);
-  json += ",\"voltage\":" + String(roombaState.voltage);
-  json += ",\"current\":" + String(roombaState.current);
-  json += ",\"charge\":" + String(roombaState.charge);
-  json += ",\"capacity\":" + String(roombaState.capacity);
-  json += ",\"distance\":" + String(roombaState.distance);
-  json += ",\"batteryTemperature\":" + String(roombaState.temp);
-  json += ",\"chargingSourcesAvailable\":" + String(roombaState.chargingSourcesAvailable);
-  json += ",\"OIMode\":" + String(roombaState.OIMode);
-  json += ",\"state\":\"" + String(getCurrentState()) + "\"";
-  json += ",\"ssid\":\"" + String(WiFi.SSID()) + "\"";
-  json += ",\"rssi\":" + String(WiFi.RSSI());
-  json += ",\"ip\":\"" + String(WiFi.localIP().toString()) + "\"";
-  json += ",\"hostname\":\"" + String(WiFi.getHostname()) + "\"";
-  json += "}";
+    || roombaState.chargingState == Roomba::ChargeStateFullCharging
+    || roombaState.chargingState == Roomba::ChargeStateTrickleCharging;
+  String json = F("{");
+  json += F("\"battery_level\":"); json += batteryLevel;
+  json += F(",\"cleaning\":"); json += boolToString(roombaState.cleaning);
+  json += F(",\"returning\":"); json += boolToString(roombaState.returning);
+  json += F(",\"docked\":"); json += boolToString(docked);
+  json += F(",\"charging\":"); json += boolToString(isCharging);
+  json += F(",\"chargingState\":"); json += roombaState.chargingState;
+  json += F(",\"voltage\":"); json += roombaState.voltage;
+  json += F(",\"current\":"); json += roombaState.current;
+  json += F(",\"charge\":"); json += roombaState.charge;
+  json += F(",\"capacity\":"); json += roombaState.capacity;
+  json += F(",\"distance\":"); json += roombaState.distance;
+  json += F(",\"batteryTemperature\":"); json += roombaState.temp;
+  json += F(",\"chargingSourcesAvailable\":"); json += roombaState.chargingSourcesAvailable;
+  json += F(",\"OIMode\":"); json += roombaState.OIMode;
+  json += F(",\"state\":\""); json += getCurrentState(); json += F("\"");
+  json += F(",\"ssid\":\""); json += WiFi.SSID(); json += F("\"");
+  json += F(",\"rssi\":"); json += WiFi.RSSI();
+  json += F(",\"ip\":\""); json += WiFi.localIP().toString(); json += F("\"");
+  json += F(",\"hostname\":\""); json += WiFi.getHostname(); json += F("\"");
+  json += F("}");
   mqttClient.publish(getMQTTTopic(statusTopic), json.c_str());
 }
 
@@ -903,7 +865,6 @@ void loop() {
       if (roombaState.docked) {
         wakeOnDock();
       } else {
-        // wakeOffDock();
         wakeup();
       }
     } else {
