@@ -21,6 +21,7 @@
 #define WAKEUP_FREQ 50000
 
 #define ROOMBA_MODEL "Roomba 780"
+#define ROOMBA_FRIENDLY_NAME "Roomba 780"
 
 #define HOSTNAME_PREFIX "roomba-"
 
@@ -40,4 +41,4 @@
 #define MQTT_DRIVE_TOPIC "drive"
 #define MQTT_SONG_TOPIC "play_song"
 #define MQTT_LWT_TOPIC "LWT"
-#define MQTT_LWT_MESSAGE "Online"
+#define MQTT_LWT_MESSAGE "offline"
