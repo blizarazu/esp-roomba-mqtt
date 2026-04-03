@@ -988,6 +988,18 @@ static void dispatchCmd(const String &action)
     wakeup();
 }
 
+static void dispatchDrive(int16_t v, int16_t r)
+{
+  v = (int16_t)constrain(v, -500, 500);
+  r = (int16_t)constrain(r, -32768, 32767);
+  roombaWakeAndSafe();
+  roomba.drive(v, r);
+  if (v == 0 && r == 0) {
+    delay(100);
+    roomba.start();
+  }
+}
+
 static void handleControlCmd()
 {
   dispatchCmd(controlServer.arg("action"));
@@ -1125,7 +1137,7 @@ void setup()
       {
         // WiFi unavailable — enter config portal so credentials can be updated
         portalStart();
-        portalSetHandlers(serveHomePage, dispatchCmd);
+        portalSetHandlers(serveHomePage, dispatchCmd, serveControlPage, dispatchDrive);
         while (portalActive())
         {
           portalHandle();
@@ -1690,7 +1702,7 @@ void loop()
       controlServer.stop();
       roomba.streamCommand(Roomba::StreamCommandPause);
       portalStart();
-      portalSetHandlers(serveHomePage, dispatchCmd);
+      portalSetHandlers(serveHomePage, dispatchCmd, serveControlPage, dispatchDrive);
     }
     return;
   }

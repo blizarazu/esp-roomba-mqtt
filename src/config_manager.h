@@ -76,4 +76,6 @@ bool portalActive(); // true while portal is running
 // and dispatch Roomba commands without depending on main.cpp internals.
 typedef void (*PortalHomeHandler)(ESP8266WebServer &server);
 typedef void (*PortalCmdHandler)(const String &action);
-void portalSetHandlers(PortalHomeHandler home, PortalCmdHandler cmd);
+typedef void (*PortalDriveHandler)(int16_t velocity, int16_t radius);
+void portalSetHandlers(PortalHomeHandler home, PortalCmdHandler cmd,
+                       PortalHomeHandler control, PortalDriveHandler drive);

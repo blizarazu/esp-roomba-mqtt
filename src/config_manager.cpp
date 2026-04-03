@@ -129,7 +129,7 @@ void sendUpdateFailPage(ESP8266WebServer &s, const char *error)
     s.sendContent_P(PSTR("</p><p><a href='/update'>Try again</a></p></body></html>"));
 }
 
-// active: 0=Home, 1=Configuration, 2=Firmware
+// active: 0=Home, 1=Control, 2=Configuration, 3=Firmware
 static void sendNav(ESP8266WebServer &s, bool /*isPortal*/, uint8_t active)
 {
     s.sendContent_P(PSTR("<nav>"));
@@ -138,12 +138,14 @@ static void sendNav(ESP8266WebServer &s, bool /*isPortal*/, uint8_t active)
     else
         s.sendContent_P(PSTR("<a href='/'>Home</a>"));
     s.sendContent_P(PSTR(" &nbsp;|&nbsp; "));
-    if (active == 1)
+    s.sendContent_P(PSTR("<a href='/control'>Control</a>"));
+    s.sendContent_P(PSTR(" &nbsp;|&nbsp; "));
+    if (active == 2)
         s.sendContent_P(PSTR("<span>Configuration</span>"));
     else
         s.sendContent_P(PSTR("<a href='/config'>Configuration</a>"));
     s.sendContent_P(PSTR(" &nbsp;|&nbsp; "));
-    if (active == 2)
+    if (active == 3)
         s.sendContent_P(PSTR("<span>Firmware</span>"));
     else
         s.sendContent_P(PSTR("<a href='/update'>Firmware</a>"));
@@ -155,7 +157,7 @@ void serveConfigPage(ESP8266WebServer &s, bool isPortal)
     s.setContentLength(CONTENT_LENGTH_UNKNOWN);
     s.send(200, "text/html", "");
     s.sendContent_P(HTML_HEAD);
-    sendNav(s, isPortal, 1);
+    sendNav(s, isPortal, 2);
     s.sendContent_P(PSTR(
         "<h2>Configuration</h2>"
         "<form method='POST' action='/save'>"
@@ -227,7 +229,7 @@ void serveUpdatePage(ESP8266WebServer &s, bool isPortal)
     s.setContentLength(CONTENT_LENGTH_UNKNOWN);
     s.send(200, "text/html", "");
     s.sendContent_P(HTML_HEAD);
-    sendNav(s, isPortal, 2);
+    sendNav(s, isPortal, 3);
     s.sendContent_P(PSTR(
         "<h2>Firmware update</h2>"
         "<p>Upload the <b>firmware.bin</b> file.<br></p>"
@@ -273,13 +275,18 @@ static uint32_t _portalStartMs = 0;
 static DNSServer *_dns = nullptr;
 #endif
 
-static PortalHomeHandler _homeHandler = nullptr;
-static PortalCmdHandler _cmdHandler = nullptr;
+static PortalHomeHandler _homeHandler    = nullptr;
+static PortalCmdHandler  _cmdHandler     = nullptr;
+static PortalHomeHandler _controlHandler = nullptr;
+static PortalDriveHandler _driveHandler  = nullptr;
 
-void portalSetHandlers(PortalHomeHandler home, PortalCmdHandler cmd)
+void portalSetHandlers(PortalHomeHandler home, PortalCmdHandler cmd,
+                       PortalHomeHandler control, PortalDriveHandler drive)
 {
-    _homeHandler = home;
-    _cmdHandler = cmd;
+    _homeHandler    = home;
+    _cmdHandler     = cmd;
+    _controlHandler = control;
+    _driveHandler   = drive;
 }
 
 static void handleRoot()
@@ -299,8 +306,24 @@ static void handlePortalCmd()
 {
     if (_cmdHandler)
         _cmdHandler(_server->arg("action"));
-    _server->sendHeader(F("Location"), F("/"));
+    _server->sendHeader(F("Location"), F("/control"));
     _server->send(302, F("text/plain"), "");
+}
+
+static void handlePortalControl()
+{
+    if (_controlHandler)
+        _controlHandler(*_server);
+    else
+        serveConfigPage(*_server, true);
+}
+
+static void handlePortalDrive()
+{
+    if (_driveHandler)
+        _driveHandler((int16_t)_server->arg("v").toInt(),
+                      (int16_t)_server->arg("r").toInt());
+    _server->send(200, F("text/plain"), F("OK"));
 }
 
 static void handleSave()
@@ -416,8 +439,10 @@ void portalStart()
 
     _server = new ESP8266WebServer(80);
     _server->on("/", HTTP_GET, handleRoot);
+    _server->on("/control", HTTP_GET, handlePortalControl);
     _server->on("/config", HTTP_GET, handlePortalConfig);
     _server->on("/cmd", HTTP_POST, handlePortalCmd);
+    _server->on("/drive", HTTP_POST, handlePortalDrive);
     _server->on("/save", HTTP_POST, handleSave);
     _server->on("/reset", HTTP_POST, handleReset);
     _server->on("/update", HTTP_GET, handlePortalUpdateForm);
