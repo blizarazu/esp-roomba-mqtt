@@ -113,6 +113,7 @@ static const char *boolStr(bool v) { return v ? "true" : "false"; }
 // Forward declarations
 void sendStatus();
 String getCurrentState();
+static void roombaDeepWakeAndReconnect();
 
 // Control web server (always-on in normal WiFi mode, port 80)
 ESP8266WebServer controlServer(80);
@@ -122,14 +123,17 @@ void wakeup()
   DLOG("Wakeup Roomba\n");
   pinMode(BRC_PIN, OUTPUT);
   digitalWrite(BRC_PIN, LOW);
-  delay(200);
+  delay(200);          // short pulse for keep-alive; safely below baud-rate-change threshold
   pinMode(BRC_PIN, INPUT);
   delay(200);
 }
 
 static void roombaWakeAndSafe()
 {
-  wakeup();
+  if (!roombaConnected)
+    roombaDeepWakeAndReconnect();
+  else
+    wakeup();
   roomba.start();
   delay(50);
   roomba.safeMode();
@@ -150,17 +154,47 @@ void wakeOnDock()
 #endif
 }
 
+// Initialise (or re-initialise) the Roomba OI and sensor stream.
+// Called at boot and again after waking from deep sleep, which resets the
+// Roomba's OI back to OFF mode and discards the previous stream subscription.
+static void initRoombaStream()
+{
+  DLOG("Initialising Roomba OI and sensor stream\n");
+  roomba.start();
+  delay(100);
+  roomba.stream({}, 0);    // cancel any stale stream subscription
+  delay(50);
+  roomba.stream(sensors, sizeof(sensors));
+}
+
+// Aggressive wake from deep sleep (green light off, roombaConnected == false).
+// Sends 3 BRC pulses then fully re-initialises the OI and sensor stream.
+static void roombaDeepWakeAndReconnect()
+{
+  DLOG("Roomba deep sleep — aggressive wake\n");
+  // 3 × 500ms BRC pulses. When OI is OFF (deep sleep), BRC is a wake signal,
+  // not a baud rate change, so 500ms is safe here (unlike the keep-alive pulse).
+  for (int i = 0; i < 3; i++)
+  {
+    pinMode(BRC_PIN, OUTPUT);
+    digitalWrite(BRC_PIN, LOW);
+    delay(500);
+    pinMode(BRC_PIN, INPUT);
+    delay(200);
+  }
+  delay(300);           // allow OI to boot before sending commands
+  initRoombaStream();
+  delay(100);
+}
+
 void turnOn()
 {
   DLOG("Turning on\n");
   roombaWakeAndSafe();
   roomba.cover();
-  if (roombaConnected)
-  {
-    roombaState.cleaning = true;
-    roombaState.returning = false;
-    roombaState.paused = false;
-  }
+  roombaState.cleaning = true;
+  roombaState.returning = false;
+  roombaState.paused = false;
 }
 
 void turnOff()
@@ -169,17 +203,14 @@ void turnOff()
   roomba.start();
   delay(50);
   roomba.power();
-  if (roombaConnected)
-  {
-    roombaState.cleaning = false;
-    roombaState.returning = false;
-    roombaState.paused = false;
-  }
+  roombaState.cleaning = false;
+  roombaState.returning = false;
+  roombaState.paused = false;
 }
 
 void stop()
 {
-  if (roombaConnected && roombaState.cleaning)
+  if (roombaState.cleaning)
   {
     DLOG("Stopping\n");
     roomba.start();
@@ -191,7 +222,7 @@ void stop()
   }
   else
   {
-    DLOG("Not cleaning or Roomba not connected, can't stop\n");
+    DLOG("Not cleaning, can't stop\n");
   }
 }
 
@@ -200,12 +231,9 @@ void cleanSpot()
   DLOG("Cleaning Spot\n");
   roombaWakeAndSafe();
   roomba.spot();
-  if (roombaConnected)
-  {
-    roombaState.cleaning = true;
-    roombaState.returning = false;
-    roombaState.paused = false;
-  }
+  roombaState.cleaning = true;
+  roombaState.returning = false;
+  roombaState.paused = false;
 }
 
 void returnToBase()
@@ -213,12 +241,9 @@ void returnToBase()
   DLOG("Returning to Base\n");
   roombaWakeAndSafe();
   roomba.dock();
-  if (roombaConnected)
-  {
-    roombaState.cleaning = true;
-    roombaState.returning = true;
-    roombaState.paused = false;
-  }
+  roombaState.cleaning = true;
+  roombaState.returning = true;
+  roombaState.paused = false;
 }
 
 void maxClean()
@@ -226,12 +251,9 @@ void maxClean()
   DLOG("Max Clean\n");
   roombaWakeAndSafe();
   roomba.maxClean();
-  if (roombaConnected)
-  {
-    roombaState.cleaning = true;
-    roombaState.returning = false;
-    roombaState.paused = false;
-  }
+  roombaState.cleaning = true;
+  roombaState.returning = false;
+  roombaState.paused = false;
 }
 
 void playSong(const uint8_t *notes, int len)
@@ -301,7 +323,10 @@ bool performCommand(const char *cmdchar)
   }
   else if (cmd == "wake_up")
   {
-    wakeup();
+    if (!roombaConnected)
+      roombaDeepWakeAndReconnect();
+    else
+      wakeup();
   }
   else
   {
@@ -985,7 +1010,12 @@ static void dispatchCmd(const String &action)
   else if (action == "locate")
     locate();
   else if (action == "wake")
-    wakeup();
+  {
+    if (!roombaConnected)
+      roombaDeepWakeAndReconnect();
+    else
+      wakeup();
+  }
 }
 
 static void dispatchDrive(int16_t v, int16_t r)
@@ -1176,15 +1206,7 @@ void setup()
   Debug.setSerialEnabled(false);
 #endif
 
-  roomba.start();
-  delay(100);
-
-  // Reset stream sensor values
-  roomba.stream({}, 0);
-  delay(100);
-
-  // Request sensor stream
-  roomba.stream(sensors, sizeof(sensors));
+  initRoombaStream();
 
   // Start control web server (accessible at http://roomba.local/)
   setupControlServer();
@@ -1754,24 +1776,26 @@ void loop()
   }
 
 #if KEEP_ROOMBA_AWAKE
-  // Wakeup the roomba at fixed intervals
+  // Keep the Roomba awake at fixed intervals.
+  // Must send an actual OI command (not just a BRC pulse) every cycle to reset
+  // the Roomba's OI inactivity timer; otherwise it sleeps after ~5 minutes.
   if (now - lastWakeupTime > WAKEUP_FREQ)
   {
     lastWakeupTime = now;
-    if (!roombaState.cleaning)
+    if (!roombaConnected)
     {
-      if (roombaState.docked)
-      {
-        wakeOnDock();
-      }
-      else
-      {
-        wakeup();
-      }
+      // Roomba in deep sleep — aggressive 3×500ms wake + full OI re-init
+      roombaDeepWakeAndReconnect();
     }
     else
     {
-      wakeup();
+      // Roomba awake — short BRC pulse (safe, no baud-rate change) +
+      // OI stream command to reset the inactivity timer
+      if (roombaState.docked)
+        wakeOnDock();
+      else
+        wakeup();
+      roomba.stream(sensors, sizeof(sensors));
     }
   }
 #endif
@@ -1785,12 +1809,18 @@ void loop()
     lastStateMsgTime = now;
     if (now - roombaState.timestamp > 30000 || roombaState.sent)
     {
-      DLOG("Roomba state already sent (%.1fs old)\n", (now - roombaState.timestamp) / 1000.0);
-      DLOG("Request stream\n");
-      roomba.stream(sensors, sizeof(sensors));
+      DLOG("Roomba state stale (%.1fs old)\n", (now - roombaState.timestamp) / 1000.0);
       if (!roombaConnected)
       {
+        // OI is in OFF mode after deep sleep — full re-init before stream will work
+        DLOG("Roomba disconnected, re-initialising stream\n");
+        initRoombaStream();
         sendStatus();
+      }
+      else
+      {
+        DLOG("Request stream\n");
+        roomba.stream(sensors, sizeof(sensors));
       }
     }
     else
